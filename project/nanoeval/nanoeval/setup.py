@@ -75,6 +75,19 @@ def nanoeval_entrypoint(entry: Coroutine[Any, Any, None]) -> None:
     # We do this by default because the default concurrency is 2048, and we
     # open a logging file for each attempt by default. So we'll use min
     # 2048 fds already.
-    resource.setrlimit(resource.RLIMIT_NOFILE, (131_072, 131_072))
+    try:
+        # Get current limits
+        soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        desired_limit = 131_072
+        
+        # Only try to set up to the hard limit
+        new_limit = min(desired_limit, hard_limit)
+        if new_limit > soft_limit:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (new_limit, hard_limit))
+            logger.info(f"Set file descriptor limit to {new_limit}")
+        else:
+            logger.info(f"Keeping existing file descriptor limit of {soft_limit}")
+    except Exception as e:
+        logger.warning(f"Failed to set file descriptor limit: {e}. Continuing with current limit.")
 
     asyncio.run(_main_process_async_entrypoint(entry))

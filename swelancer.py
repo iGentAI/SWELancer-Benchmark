@@ -284,7 +284,7 @@ class SWELancerEval(PythonCodingEval):
 
     @override
     async def get_tasks(self) -> list[SWELancerTask]:
-        tasks = pd.read_csv("swelancer_tasks.csv")
+        tasks = pd.read_csv("swelancer/swelancer_tasks.csv")
         env_vars = dotenv_values(".env")    
         SWEFL_ENV = {
             "PUSHER_APP_KEY": PUSHER_APP_KEY,
