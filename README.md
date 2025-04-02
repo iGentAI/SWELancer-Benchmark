@@ -103,7 +103,7 @@ Create your own implementation of the `ComputerInterface` class that interfaces 
 
 ```python
 class YourComputerInterface(ComputerInterface):
-  async def send_shell_command(self, command: str) -> CommandResult:
+  async def send_shell_command(self, command: str) -> ExecutionResult:
     """Execute a shell command and return the result"""
     pass
   async def upload(self, local_path: str, remote_path: str) -> None:
@@ -112,7 +112,7 @@ class YourComputerInterface(ComputerInterface):
   async def download(self, remote_path: str) -> bytes:
     """Download a file from the compute environment"""
     pass
-  async def check_shell_command(self, command: str) -> CommandResult:
+  async def check_shell_command(self, command: str) -> ExecutionResult:
     """Execute a shell command and raise an error if it fails"""
     pass
     async def cleanup(self) -> None:
