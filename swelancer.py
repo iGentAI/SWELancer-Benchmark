@@ -284,15 +284,34 @@ class SWELancerEval(PythonCodingEval):
 
     @override
     async def get_tasks(self) -> list[SWELancerTask]:
-        tasks = pd.read_csv("swelancer_tasks.csv")
-        env_vars = dotenv_values(".env")    
+        # Get the absolute path to the benchmark's root directory
+        benchmark_root = os.path.dirname(os.path.abspath(__file__))
+
+        # Use absolute paths for task CSV file
+        tasks_path = os.path.join(benchmark_root, "swelancer_tasks.csv")
+        tasks = pd.read_csv(tasks_path)
+
+        # Use absolute path for .env file with fallbacks to OS environment variables
+        env_file_path = os.path.join(benchmark_root, ".env")
+        try:
+            env_vars = dotenv_values(env_file_path)
+            logger.info(f"Loaded environment variables from {env_file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load .env file: {e}. Using environment variables instead.")
+            env_vars = {
+                "USE_WEB_PROXY": os.environ.get("USE_WEB_PROXY", "false"),
+                "EXPENSIFY_URL": os.environ.get("EXPENSIFY_URL", "https://www.expensify.com/"),
+                "NEW_EXPENSIFY_URL": os.environ.get("NEW_EXPENSIFY_URL", "https://new.expensify.com/"),
+                "ALCATRAZ_TIMEOUT": os.environ.get("ALCATRAZ_TIMEOUT", "480"),
+            }
+
         SWEFL_ENV = {
             "PUSHER_APP_KEY": PUSHER_APP_KEY,
-            "PUSHER_APP_SECRET": PUSHER_APP_SECRET, 
+            "PUSHER_APP_SECRET": PUSHER_APP_SECRET,
             "PUSHER_APP_ID": PUSHER_APP_ID,
-            "USE_WEB_PROXY": env_vars["USE_WEB_PROXY"],
-            "EXPENSIFY_URL": env_vars["EXPENSIFY_URL"],
-            "NEW_EXPENSIFY_URL": env_vars["NEW_EXPENSIFY_URL"],
+            "USE_WEB_PROXY": env_vars.get("USE_WEB_PROXY", "false"),
+            "EXPENSIFY_URL": env_vars.get("EXPENSIFY_URL", "https://www.expensify.com/"),
+            "NEW_EXPENSIFY_URL": env_vars.get("NEW_EXPENSIFY_URL", "https://new.expensify.com/"),
             "ISSUE_ID": "0",
             "LC_ALL": "C.UTF-8",
             "EVAL_VARIANT": "ic_swe",
@@ -329,13 +348,17 @@ class SWELancerEval(PythonCodingEval):
     @override
     async def evaluate(self, task: ComputerTask) -> FinalResult:
         last_convo = None
-        
-        # Create logs directory if it doesn't exist
-        os.makedirs("conversation_logs", exist_ok=True)
-        
+
+        # Get the absolute path to the benchmark's root directory
+        benchmark_root = os.path.dirname(os.path.abspath(__file__))
+
+        # Create logs directory with absolute path
+        logs_dir = os.path.join(benchmark_root, "conversation_logs")
+        os.makedirs(logs_dir, exist_ok=True)
+
         # Create unique log file name using task and attempt IDs
-        log_filename = f"conversation_logs/{task.question_id}_{task.attempt_id}_{task.retry_idx}.jsonl"
-        
+        log_filename = os.path.join(logs_dir, f"{task.question_id}_{task.attempt_id}_{task.retry_idx}.jsonl")
+
         async with generator_with_cleanup(self.solver.run(task)) as gen:
             async for step in gen:
                 if step.convo:
