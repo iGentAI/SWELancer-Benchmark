@@ -3,6 +3,9 @@
 # SWELancer-Benchmark Setup Script for Fedora-based system
 # Based on the original Dockerfile and run.sh
 
+# Start the timer
+START_TIME=$SECONDS
+
 # Function to print usage information
 function print_usage() {
   echo "Usage: $0 [OPTIONS]"
@@ -513,12 +516,59 @@ echo ""
 echo "# 6. Start pusher-fake"
 echo "pusher-fake > /dev/null 2>&1 & || bundle exec pusher-fake > /dev/null 2>&1 &"
 echo ""
-echo "# 7. Run the Ansible playbooks"
+echo "# 7. Run the Ansible playbooks (with timing)"
 echo "cd /app/tests"
-echo "python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local setup_expensify.yml"
-echo "python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local setup_mitmproxy.yml"
+echo "echo 'Running setup_expensify.yml...'; time python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local setup_expensify.yml"
+echo "echo 'Running setup_mitmproxy.yml...'; time python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local setup_mitmproxy.yml"
+echo ""
+echo "# Example command to copy-paste and run both playbooks:"
+echo "cd /app/tests && echo 'Running setup_expensify.yml...' && time python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local setup_expensify.yml && echo 'Running setup_mitmproxy.yml...' && time python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local setup_mitmproxy.yml"
 echo ""
 echo "Reminder: All Python commands use version 3.12"
 echo "Reminder: The Ansible playbooks should be run from /app/tests"
+
+# Run the Ansible playbooks
+echo_status "Running Ansible playbooks"
+cd /app/tests
+
+echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo -e "\033[1;33mRunning setup_expensify.yml\033[0m"
+echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+EXPENSIFY_START=$(date +%s)
+python3.12 -m ansible.cli.playbook -i "localhost," --connection=local /app/tests/setup_expensify.yml || {
+  echo -e "\033[1;31mError running setup_expensify.yml playbook\033[0m"
+}
+EXPENSIFY_END=$(date +%s)
+EXPENSIFY_TIME=$((EXPENSIFY_END - EXPENSIFY_START))
+echo -e "\033[1;32mCompleted setup_expensify.yml in ${EXPENSIFY_TIME} seconds\033[0m"
+
+echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo -e "\033[1;33mRunning setup_mitmproxy.yml\033[0m"
+echo -e "\033[1;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+MITMPROXY_START=$(date +%s)
+python3.12 -m ansible.cli.playbook -i "localhost," --connection=local /app/tests/setup_mitmproxy.yml || {
+  echo -e "\033[1;31mError running setup_mitmproxy.yml playbook\033[0m"
+}
+MITMPROXY_END=$(date +%s)
+MITMPROXY_TIME=$((MITMPROXY_END - MITMPROXY_START))
+echo -e "\033[1;32mCompleted setup_mitmproxy.yml in ${MITMPROXY_TIME} seconds\033[0m"
+
+cd - > /dev/null # Return to previous directory
+
+echo ""
+echo "Environment is now fully set up and configured. To run tests, use:"
+echo "cd /app/tests && python3.12 -m ansible.cli.playbook -i \"localhost,\" --connection=local run_user_tool.yml"
+echo ""
+
+# Calculate and display execution time
+ELAPSED_TIME=$((SECONDS - START_TIME))
+HOURS=$((ELAPSED_TIME / 3600))
+MINUTES=$(((ELAPSED_TIME % 3600) / 60))
+SECONDS=$((ELAPSED_TIME % 60))
+
+echo ""
+echo -e "\033[1;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+echo -e "\033[1;33mTotal setup time: \033[1;36m${HOURS}h ${MINUTES}m ${SECONDS}s\033[0m"
+echo -e "\033[1;32m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
 
 exit 0
