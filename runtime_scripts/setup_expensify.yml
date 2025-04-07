@@ -1,12 +1,25 @@
 ---
 - hosts: localhost
   connection: local
+  gather_facts: yes
   tasks:
-    - name: Ensure ISSUE_ID environment variable is set
+    - name: Create a symlink for this playbook in /app/tests if needed
+      file:
+        src: "{{ playbook_dir }}/{{ playbook_name }}"
+        dest: "/app/tests/{{ playbook_name }}"
+        state: link
+        force: yes
+      become: yes
+      when: playbook_dir != "/app/tests"
+      ignore_errors: yes
+      vars:
+        playbook_name: "{{ ansible_play_name | basename }}"
+    - name: Ensure ISSUE_ID environment variable is set and not empty
       assert:
         that:
           - lookup('env', 'ISSUE_ID') is not none
-        fail_msg: "The environment variable ISSUE_ID is not set."
+          - lookup('env', 'ISSUE_ID') != ""
+        fail_msg: "The environment variable ISSUE_ID is not set or is empty. Please set it before running this playbook."
     
     - name: Verify the flow file does not contain PII or unnecessary information
       shell: |
@@ -26,8 +39,43 @@
         mode: '0755'
 
     - name: Generate empty certs store
-      shell: mkdir -p /root/.pki/nssdb && certutil --empty-password -d $HOME/.pki/nssdb -N
+      shell: mkdir -p $HOME/.pki/nssdb && certutil --empty-password -d $HOME/.pki/nssdb -N
+      become: no
     
+    - name: Check if mkcert is installed
+      command: which mkcert
+      register: mkcert_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Install mkcert (Fedora/Amazon Linux)
+      dnf:
+        name: mkcert
+        state: present
+      when: mkcert_check.rc != 0 and ansible_os_family == "RedHat"
+      ignore_errors: yes
+      register: mkcert_install
+
+    - name: Install mkcert from source (Fedora/Amazon Linux fallback)
+      block:
+        - name: Install Go (required for mkcert build)
+          dnf:
+            name: golang
+            state: present
+
+        - name: Download and install mkcert from source
+          shell: |
+            export GOPATH=$HOME/go
+            export PATH=$PATH:$GOPATH/bin
+            go install filippo.io/mkcert@latest
+            cp $HOME/go/bin/mkcert /usr/local/bin/
+          args:
+            executable: /bin/bash
+      when:
+        - mkcert_check.rc != 0
+        - ansible_os_family == "RedHat"
+        - mkcert_install is failed
+
     - name: Generate CA authority using mkcert
       shell: |
         mkcert -install
@@ -120,7 +168,7 @@
 
     - name: Use nvm to install specific Node.js version (using '.nvmrc')
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         nvm install
       args:
         chdir: /app/expensify
@@ -128,7 +176,7 @@
     
     - name: Use npm version to set git tag if it exists
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         npm version {{ git_tag.stdout }} --no-git-tag-version
       args:
         chdir: /app/expensify
@@ -137,7 +185,7 @@
     
     # - name: Set npm registry to use the local npm proxy
     #   shell: |
-    #     source /root/.nvm/nvm.sh
+    #     source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
     #     npm set registry http://npmcache:4873/
     #   args:
     #     chdir: /app/expensify
@@ -145,7 +193,7 @@
 
     - name: Install node modules via npm
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         npm install --no-cache
       args:
         chdir: /app/expensify
@@ -162,7 +210,7 @@
 
     - name: Compile Development Webpack (TypeScript)
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         npx webpack --config ./config/webpack/webpack.dev.ts
       args:
         chdir: /app/expensify
@@ -176,7 +224,7 @@
     
     - name: Compile Development Webpack (JavaScript)
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         npx webpack --config ./config/webpack/webpack.dev.js
       args:
         chdir: /app/expensify

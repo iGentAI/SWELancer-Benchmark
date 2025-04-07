@@ -2,11 +2,12 @@
 - hosts: localhost
   become: true
   tasks: 
-    - name: Ensure ISSUE_ID environment variable is set
+    - name: Ensure ISSUE_ID environment variable is set and not empty
       assert:
         that:
           - lookup('env', 'ISSUE_ID') is not none
-        fail_msg: "The environment variable ISSUE_ID is not set."
+          - lookup('env', 'ISSUE_ID') != ""
+        fail_msg: "The environment variable ISSUE_ID is not set or is empty. Please set it before running this playbook."
 
     - name: Get the commit ID for the issue
       shell: |
@@ -31,7 +32,7 @@
     
     # - name: Install npm dependencies
     #   shell: |
-    #     source /root/.nvm/nvm.sh
+    #     source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
     #     npm install
     #   args:
     #     chdir: /app/expensify
@@ -44,7 +45,7 @@
 
     - name: Compile Development Webpack (TypeScript)
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         npx webpack --config ./config/webpack/webpack.dev.ts
       args:
         chdir: /app/expensify
@@ -61,7 +62,7 @@
       
     - name: Compile Development Webpack (JavaScript)
       shell: |
-        source /root/.nvm/nvm.sh
+        source {{ lookup('env', 'HOME') }}/.nvm/nvm.sh
         npx webpack --config ./config/webpack/webpack.dev.js
       args:
         chdir: /app/expensify
@@ -79,11 +80,12 @@
         or
         (webpack_file_js.stat.exists and webpack_compile_js.rc != 0)
 
-    - name: Ensure ISSUE_ID environment variable is set (redundant check)
+    - name: Ensure ISSUE_ID environment variable is still set and not empty
       assert:
         that:
           - lookup('env', 'ISSUE_ID') is not none
-        fail_msg: "The environment variable ISSUE_ID is not set."
+          - lookup('env', 'ISSUE_ID') != ""
+        fail_msg: "The environment variable ISSUE_ID is not set or is empty. Please set it before running this playbook."
   
     - name: Start npm server in the background
       shell: |
@@ -110,7 +112,6 @@
       args:
         chdir: /app/tests/
       ignore_errors: yes
-      no_log: true
     
     - name: Start ffmpeg recording
       shell: |
@@ -128,7 +129,6 @@
       when: build_failed is not defined
       register: pytest_result
       ignore_errors: yes
-      no_log: true
     
     - name: Simulate pytest failure due to build error
       shell: |
@@ -139,7 +139,6 @@
       when: build_failed is defined
       register: pytest_result
       ignore_errors: yes
-      no_log: true
     
     - name: Stop ffmpeg recording
       shell: |
@@ -152,12 +151,25 @@
       shell: "kill `cat /tmp/npm_run_dev.pid`"
       ignore_errors: yes
     
-    - name: Kill all node processes if they exist
-      shell: "pgrep -f node && pkill -f node || true"
+    - name: Kill only npm server node processes
+      shell: |
+        if [ -f /tmp/npm_run_dev.pid ]; then
+          NPM_PID=$(cat /tmp/npm_run_dev.pid)
+          # Kill only processes in the npm server process group
+          pkill -TERM -P $NPM_PID || true
+          kill $NPM_PID 2>/dev/null || true
+        fi
       failed_when: false
 
     - name: Stop mitmdump if exist
-      shell: "pgrep -f mitmdump && pkill -f mitmdump || true"
+      shell: |
+        if [ -f /tmp/mitmdump.pid ]; then
+          MITM_PID=$(cat /tmp/mitmdump.pid)
+          kill $MITM_PID 2>/dev/null || true
+        else
+          # Only as backup, use more specific pattern
+          pkill -f "mitmdump -s replay.py" || true
+        fi
       failed_when: false
 
     - name: Clean up pid files
