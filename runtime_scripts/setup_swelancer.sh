@@ -106,11 +106,15 @@ sudo mkdir -p /app/tests/issues
 sudo chown -R $USER:$USER /app
 
 # Clone the SWELancer-Benchmark repository
-echo_status "Cloning SWELancer-Benchmark repository"
-git clone https://github.com/openai/SWELancer-Benchmark.git || {
-  echo "ERROR: Failed to clone SWELancer-Benchmark. Cannot continue without the repository."
-  exit 1
-}
+if [ -d "SWELancer-Benchmark" ]; then
+  echo_status "SWELancer-Benchmark repository already cloned, skipping clone"
+else
+  echo_status "Cloning SWELancer-Benchmark repository"
+  git clone https://github.com/openai/SWELancer-Benchmark.git || {
+    echo "ERROR: Failed to clone SWELancer-Benchmark. Cannot continue without the repository."
+    exit 1
+  }
+fi
 
 echo_status "Updating system packages"
 sudo dnf update -y
@@ -460,7 +464,7 @@ chmod 700 $HOME/.pki/nssdb/
 
 # Initialize a fresh NSS database with non-interactive empty password
 echo "Initializing fresh NSS database..."
-echo -e "\n\n" | certutil -N -d sql:$HOME/.pki/nssdb
+certutil -N -d sql:$HOME/.pki/nssdb --empty-password
 
 # Install certificate in system trust store and NSS database
 echo_status "Installing mitmproxy certificates in system trust stores"
@@ -472,7 +476,7 @@ sudo update-ca-trust extract
 
 # Browser certificates using user's NSS database - non-interactive with empty password
 echo "Adding certificate to user's NSS database..."
-echo -e "\n\n" | certutil -A -d sql:$HOME/.pki/nssdb -t "C,," -n "mitmproxy-ca-cert" -i $HOME/.mitmproxy/mitmproxy-ca-cert.pem
+certutil -A -d sql:$HOME/.pki/nssdb -t "C,," -n "mitmproxy-ca-cert" -i $HOME/.mitmproxy/mitmproxy-ca-cert.pem -a
 
 # Verify certificate was added correctly
 certutil -L -d sql:$HOME/.pki/nssdb | grep "mitmproxy-ca-cert" || \
