@@ -108,7 +108,7 @@
     - name: Rewrite test file to include required params
       shell: |
         ISSUE_ID={{ lookup('env', 'ISSUE_ID') }}
-        python3.12 rewrite_test.py issues/$ISSUE_ID/user_tool.py
+        PYTHONPATH=$HOME/.local/lib/python3.12/site-packages:$PYTHONPATH python3.12 rewrite_test.py issues/$ISSUE_ID/user_tool.py
       args:
         chdir: /app/tests/
       ignore_errors: yes
