@@ -105,6 +105,13 @@ sudo mkdir -p /app/tests/issues
 # Set appropriate permissions
 sudo chown -R $USER:$USER /app
 
+# Clone the SWELancer-Benchmark repository
+echo_status "Cloning SWELancer-Benchmark repository"
+git clone https://github.com/openai/SWELancer-Benchmark.git || {
+  echo "ERROR: Failed to clone SWELancer-Benchmark. Cannot continue without the repository."
+  exit 1
+}
+
 echo_status "Updating system packages"
 sudo dnf update -y
 
@@ -119,7 +126,8 @@ install_packages \
   gnupg2 \
   openssh-clients \
   xz \
-  patch
+  patch \
+  python3-libdnf5  # Added libdnf5 package for mitmproxy
 
 # Check for Python 3.12 and install it if needed
 echo_status "Installing Python 3.12"
@@ -244,7 +252,7 @@ fi
 # Install Python requirements (use Python 3.12 specifically)
 echo_status "Installing Python requirements with Python 3.12"
 
-# Create a default requirements.txt if it doesn't exist
+# Use requirements.txt from the repo if available
 if [ -f "SWELancer-Benchmark/requirements.txt" ]; then
   cp SWELancer-Benchmark/requirements.txt .
 else
@@ -281,16 +289,19 @@ chmod +x $HOME/.config/bspwm/bspwmrc
 # Copy runtime scripts to the app directory, mirroring the COPY instructions in Dockerfile
 echo_status "Copying scripts to the appropriate locations"
 
-# Copy files if the SWELancer-Benchmark repo is cloned
+# Copy files from the SWELancer-Benchmark repo
 if [ -d "SWELancer-Benchmark/issues" ]; then
+  echo "Copying issues directory..."
   cp -r SWELancer-Benchmark/issues/ /app/tests/
 fi
 
 if [ -d "SWELancer-Benchmark/utils" ]; then
+  echo "Copying utils directory..."
   cp -r SWELancer-Benchmark/utils/ /app/tests/
 fi
 
 if [ -d "SWELancer-Benchmark/runtime_scripts" ]; then
+  echo "Copying runtime scripts..."
   # Copy runtime scripts exactly as in the Dockerfile
   cp SWELancer-Benchmark/runtime_scripts/setup_expensify.yml /app/tests/ 2>/dev/null || echo "setup_expensify.yml not found"
   cp SWELancer-Benchmark/runtime_scripts/setup_mitmproxy.yml /app/tests/ 2>/dev/null || echo "setup_mitmproxy.yml not found"
@@ -312,6 +323,8 @@ if [ -d "SWELancer-Benchmark/runtime_scripts" ]; then
 
   # Make run.sh executable, just like in Dockerfile
   chmod +x /app/tests/run.sh 2>/dev/null || echo "Could not make run.sh executable"
+  chmod +x /app/tests/replay.py 2>/dev/null || echo "Could not make replay.py executable"
+  chmod +x /app/tests/rewrite_test.py 2>/dev/null || echo "Could not make rewrite_test.py executable"
 fi
 
 # Copy nginx configuration if available
@@ -445,9 +458,9 @@ rm -rf $HOME/.pki/nssdb/ 2>/dev/null || true
 mkdir -p $HOME/.pki/nssdb/
 chmod 700 $HOME/.pki/nssdb/
 
-# Initialize a fresh NSS database
+# Initialize a fresh NSS database with non-interactive empty password
 echo "Initializing fresh NSS database..."
-certutil -N --empty-password -d sql:$HOME/.pki/nssdb
+echo -e "\n\n" | certutil -N -d sql:$HOME/.pki/nssdb
 
 # Install certificate in system trust store and NSS database
 echo_status "Installing mitmproxy certificates in system trust stores"
@@ -457,16 +470,15 @@ sudo mkdir -p /etc/pki/ca-trust/source/anchors/
 sudo cp $HOME/.mitmproxy/mitmproxy-ca-cert.pem /etc/pki/ca-trust/source/anchors/mitmproxy-ca-cert.crt
 sudo update-ca-trust extract
 
-# Browser certificates using user's NSS database
+# Browser certificates using user's NSS database - non-interactive with empty password
 echo "Adding certificate to user's NSS database..."
-certutil --empty-password -d sql:$HOME/.pki/nssdb -A -t "C,," -n "mitmproxy-ca-cert" -i $HOME/.mitmproxy/mitmproxy-ca-cert.pem
+echo -e "\n\n" | certutil -A -d sql:$HOME/.pki/nssdb -t "C,," -n "mitmproxy-ca-cert" -i $HOME/.mitmproxy/mitmproxy-ca-cert.pem
 
 # Verify certificate was added correctly
 certutil -L -d sql:$HOME/.pki/nssdb | grep "mitmproxy-ca-cert" || \
   echo "WARNING: Certificate may not have been added to NSS database correctly"
 
 echo "Mitmproxy certificate setup complete"
-
 
 # Set python3.12 as default python by creating an alias
 echo_status "Setting Python 3.12 as default"
